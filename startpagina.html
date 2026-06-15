@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepagina</title>
+</head>
+<body>
+
+    <style>
+  	body {
+	    align-items: center;
+	    display: flex;
+	    flex-direction: column;
+	    justify-content: center;
+	    height: 100vh;
+	}
+
+        .but {
+	    height: 60px;
+	    width: 400px;
+	    background-color: #ff0000;
+        }
+
+.animatie {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    height: 100px;
+    overflow: hidden;
+}
+
+.auto {
+    position: absolute;
+    font-size: 60px;
+}
+
+.auto-links {
+    animation: linksRijden 2s infinite alternate ease-in-out;
+}
+
+.auto-rechts {
+    right: 0;
+    animation: rechtsRijden 2s infinite alternate ease-in-out;
+}
+
+@keyframes linksRijden {
+    0% {
+        left: 10%;
+    }
+    50% {
+        left: 45%;
+        transform: rotate(-10deg);
+    }
+    100% {
+        left: 10%;
+    }
+}
+
+@keyframes rechtsRijden {
+    0% {
+        right: 10%;
+    }
+    50% {
+        right: 45%;
+        transform: rotate(10deg);
+    }
+    100% {
+        right: 10%;
+    }
+}
+
+    </style>
+    <div class="animatie">
+        <div class="auto auto-links">🚓</div>
+        <div class="auto auto-rechts">🚒</div>
+    </div>
+
+    <h1>Botsauto</h1>
+
+    <button class='but' onclick="window.location.href='botsauto2.html'">
+        <h1>Speel nu!</h1>
+    </button>
+    
+    <p>Speel nu botsauto's voor 2 personen</p>	
+</body>
+</html>

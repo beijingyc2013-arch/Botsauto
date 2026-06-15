@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Botsauto's - Rood & Blauw | 2 Spelers</title>
+    <style>
+        * {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: radial-gradient(circle at 20% 30%, #1a2a1f, #0a0f0a);
+            color: white;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        #scorebord {
+            display: flex;
+            gap: 3rem;
+            font-size: 28px;
+            font-weight: bold;
+            background: #0a0f0ccc;
+            backdrop-filter: blur(8px);
+            padding: 10px 30px;
+            border-radius: 50px;
+            border: 1px solid #ffcc44aa;
+            font-family: monospace;
+            letter-spacing: 1px;
+            width: fit-content;
+            margin: 0 auto;
+        }
+        .p1-tekst { color: #ff3333; text-shadow: 0 0 6px #ff0000; }
+        .p2-tekst { color: #3399ff; text-shadow: 0 0 6px #0066ff; }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 28px;
+            border: 4px solid #ffe6aa;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.6);
+            background-color: #2a5f5f;
+            cursor: none;
+            max-width: 95vw;
+            height: auto;
+        }
+        
+        .besturing {
+            background: #000000aa;
+            backdrop-filter: blur(12px);
+            padding: 8px 24px;
+            border-radius: 48px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: monospace;
+            text-align: center;
+            border: 1px solid #ffd966;
+            width: fit-content;
+            margin: 0 auto;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+        
+        .reset-btn {
+            background: #2c2f3f;
+            border: none;
+            color: #ffecb3;
+            font-size: 14px;
+            padding: 6px 22px;
+            border-radius: 60px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.1s linear;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+        .reset-btn:hover {
+            background: #5a5f7a;
+            transform: scale(0.96);
+            color: white;
+        }
+        
+        @media (max-width: 700px) {
+            #scorebord { font-size: 20px; gap: 1.5rem; padding: 6px 20px; }
+            .besturing { font-size: 11px; padding: 6px 16px; }
+            .reset-btn { font-size: 12px; padding: 4px 16px; }
+            body { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div id="scorebord">
+        <div class="p1-tekst">🔴 ROOD: <span id="score1">0</span></div>
+        <div class="p2-tekst">🔵 BLAUW: <span id="score2">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="900" height="560"></canvas>
+
+    <div class="besturing">
+        💥 <strong>Botsregel:</strong> Ram de ander met MEER SNELHEID → +1 punt!<br>
+        🟥 <span class="p1-tekst">SPELER 1 (ROOD):  W A S D</span>&nbsp;&nbsp;|&nbsp;
+        🟦 <span class="p2-tekst">SPELER 2 (BLAUW):  ↑ ↓ ← →</span><br>
+        🎮 [R] = scores resetten &nbsp;&nbsp;|&nbsp;&nbsp; [T] = auto's terug naar start
+    </div>
+    <div class="button-group">
+        <button class="reset-btn" id="resetScoresBtn">⟳ RESET SCORES</button>
+        <button class="reset-btn" id="resetPositionsBtn">⟲ RESET AUTO'S (T)</button>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const score1Span = document.getElementById("score1");
+        const score2Span = document.getElementById("score2");
+
+        // ---------- SPELSTATUS ----------
+        let score1 = 0;
+        let score2 = 0;
+
+        // ---------- HELEMAAL SIMPELE AUTO (alleen kleur, geen extra details) ----------
+        class SimpeleAuto {
+            constructor(x, y, kleur, isSpeler1) {
+                this.x = x;
+                this.y = y;
+                this.w = 44;      // breedte
+                this.h = 34;      // hoogte
+                this.kleur = kleur;
+                this.isSpeler1 = isSpeler1;
+                
+                // snelheid & fysica
+                this.vx = 0;
+                this.vy = 0;
+                this.acc = 0.7;      
+                this.wrijving = 0.96;  
+                this.maxSnelheid = 8.0;
+                
+                // Stuurparameters
+                this.hoek = 0;
+                this.stuurSnelheid = 0.15;
+            }
+            
+            update() {
+                this.vx *= this.wrijving;
+                this.vy *= this.wrijving;
+                
+                let snelheid = Math.hypot(this.vx, this.vy);
+                if (snelheid > this.maxSnelheid) {
+                    this.vx = (this.vx / snelheid) * this.maxSnelheid;
+                    this.vy = (this.vy / snelheid) * this.maxSnelheid;
+                }
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Muurbotsing
+                const halfW = this.w / 2;
+                const halfH = this.h / 2;
+                if (this.x - halfW < 0) {
+                    this.x = halfW;
+                    this.vx = -this.vx * 0.85;
+                    if (Math.abs(this.vx) < 0.5) this.vx = 0;
+                }
+                if (this.x + halfW > canvas.width) {
+                    this.x = canvas.width - halfW;
+                    this.vx = -this.vx * 0.85;
+                    if (Math.abs(this.vx) < 0.5) this.vx = 0;
+                }
+                if (this.y - halfH < 0) {
+                    this.y = halfH;
+                    this.vy = -this.vy * 0.85;
+                    if (Math.abs(this.vy) < 0.5) this.vy = 0;
+                }
+                if (this.y + halfH > canvas.height) {
+                    this.y = canvas.height - halfH;
+                    this.vy = -this.vy * 0.85;
+                    if (Math.abs(this.vy) < 0.5) this.vy = 0;
+                }
+            }
+            
+            versnel(vooruit) {
+                let kracht = this.acc * (vooruit ? 1 : -0.7);
+                let richtingX = Math.cos(this.hoek);
+                let richtingY = Math.sin(this.hoek);
+                this.vx += richtingX * kracht;
+                this.vy += richtingY * kracht;
+            }
+            
+            stuur(stuurInput) {  
+                if (stuurInput === 0) return;
+                let snelheid = Math.hypot(this.vx, this.vy);
+                let snelheidFactor = Math.min(snelheid / 9.0, 1.0);
+                let huidigeStuurKracht = this.stuurSnelheid * (1 - snelheidFactor * 0.25);
+                huidigeStuurKracht = Math.max(0.1, huidigeStuurKracht);
+                let deltaHoek = stuurInput * huidigeStuurKracht;
+                this.hoek += deltaHoek;
+                if (this.hoek > Math.PI * 2) this.hoek -= Math.PI * 2;
+                if (this.hoek < 0) this.hoek += Math.PI * 2;
+            }
+            
+            // SUPER EENVOUDIG: alleen een gekleurde rechthoek met een stipje voor de voorkant
+            teken() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.hoek);
+                
+                // Carrosserie: simpele afgeronde rechthoek in de basiskleur
+                ctx.beginPath();
+                ctx.roundRect(-this.w/2, -this.h/2, this.w, this.h, 10);
+                ctx.fillStyle = this.kleur;
+                ctx.fill();
+                ctx.strokeStyle = "#ffffffcc";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Richtingsstipje (voorkant) - wit of geel voor zichtbaarheid
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(this.w/2 - 6, 0, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Klein achterlichtje (donkerrood/blauw accent - optioneel maar simpel)
+                ctx.fillStyle = this.isSpeler1 ? "#aa2222" : "#2255aa";
+                ctx.beginPath();
+                ctx.arc(-this.w/2 + 6, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+                
+                // Heel subtiele glow (alleen om de auto iets te laten opvallen)
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 24, 0, Math.PI*2);
+                ctx.fillStyle = this.kleur + "33";
+                ctx.fill();
+            }
+            
+            getHitbox() {
+                return {
+                    x: this.x - this.w/2,
+                    y: this.y - this.h/2,
+                    w: this.w,
+                    h: this.h,
+                    centerX: this.x,
+                    centerY: this.y
+                };
+            }
+        }
+        
+        // roundRect helper
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.moveTo(x+r, y);
+                this.lineTo(x+w-r, y);
+                this.quadraticCurveTo(x+w, y, x+w, y+r);
+                this.lineTo(x+w, y+h-r);
+                this.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+                this.lineTo(x+r, y+h);
+                this.quadraticCurveTo(x, y+h, x, y+h-r);
+                this.lineTo(x, y+r);
+                this.quadraticCurveTo(x, y, x+r, y);
+                return this;
+            };
+        }
+        
+        // ---------- AUTO'S AANMAKEN ----------
+        const speler1 = new SimpeleAuto(180, canvas.height/2, "#e3342f", true);  // Fel rood
+        const speler2 = new SimpeleAuto(canvas.width - 150, canvas.height/2, "#3b82f6", false); // Fel blauw
+        
+        // ---------- TOETSEN INPUT ----------
+        const keysPressed = new Map();
+        
+        function verwerkBesturing() {
+            // Speler 1 - WASD
+            let p1Gas = (keysPressed.get("w") || keysPressed.get("W"));
+            let p1Achteruit = (keysPressed.get("s") || keysPressed.get("S"));
+            let p1Stuur = 0;
+            if (keysPressed.get("a") || keysPressed.get("A")) p1Stuur = -1;
+            if (keysPressed.get("d") || keysPressed.get("D")) p1Stuur = 1;
+            
+            speler1.stuur(p1Stuur);
+            if (p1Gas) speler1.versnel(true);
+            if (p1Achteruit) speler1.versnel(false);
+            
+            // Speler 2 - Pijltjes
+            let p2Gas = keysPressed.get("ArrowUp");
+            let p2Achteruit = keysPressed.get("ArrowDown");
+            let p2Stuur = 0;
+            if (keysPressed.get("ArrowLeft")) p2Stuur = -1;
+            if (keysPressed.get("ArrowRight")) p2Stuur = 1;
+            
+            speler2.stuur(p2Stuur);
+            if (p2Gas) speler2.versnel(true);
+            if (p2Achteruit) speler2.versnel(false);
+        }
+        
+        // ---------- BOTSING + SCORE ----------
+        function behandelBotsingEnScore() {
+            const a = speler1.getHitbox();
+            const b = speler2.getHitbox();
+            
+            if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
+                // Uit elkaar duwen
+                let dx = speler2.x - speler1.x;
+                let dy = speler2.y - speler1.y;
+                let overlapX = (a.w/2 + b.w/2) - Math.abs(dx);
+                let overlapY = (a.h/2 + b.h/2) - Math.abs(dy);
+                
+                if (overlapX > 0 && overlapY > 0) {
+                    if (overlapX < overlapY) {
+                        let correctie = (overlapX + 0.6) * 0.5;
+                        if (dx > 0) {
+                            speler1.x -= correctie;
+                            speler2.x += correctie;
+                        } else {
+                            speler1.x += correctie;
+                            speler2.x -= correctie;
+                        }
+                    } else {
+                        let correctie = (overlapY + 0.6) * 0.5;
+                        if (dy > 0) {
+                            speler1.y -= correctie;
+                            speler2.y += correctie;
+                        } else {
+                            speler1.y += correctie;
+                            speler2.y -= correctie;
+                        }
+                    }
+                }
+                
+                let snelheid1 = Math.hypot(speler1.vx, speler1.vy);
+                let snelheid2 = Math.hypot(speler2.vx, speler2.vy);
+                let snelheidsDrempel = 1.1;
+                
+                if (snelheid1 > snelheid2 + snelheidsDrempel) {
+                    score1++;
+                    updateScoreUI(score1, score2, true);
+                    toonScorePopup(speler1.x, speler1.y, "#ff6666");
+                    flitsCanvas("#ff5555aa");
+                } 
+                else if (snelheid2 > snelheid1 + snelheidsDrempel) {
+                    score2++;
+                    updateScoreUI(score1, score2, false);
+                    toonScorePopup(speler2.x, speler2.y, "#66aaff");
+                    flitsCanvas("#5588ffaa");
+                }
+                
+                // Botsfysica (momentum)
+                let nx = speler2.x - speler1.x;
+                let ny = speler2.y - speler1.y;
+                let lengte = Math.hypot(nx, ny);
+                if (lengte > 0.001) {
+                    nx /= lengte;
+                    ny /= lengte;
+                    let relVx = speler2.vx - speler1.vx;
+                    let relVy = speler2.vy - speler1.vy;
+                    let snelheidLangs = relVx * nx + relVy * ny;
+                    if (snelheidLangs < 0) {
+                        let e = 0.98;
+                        let imp = (1 + e) * snelheidLangs / 2;
+                        speler1.vx += imp * nx * 0.9;
+                        speler1.vy += imp * ny * 0.9;
+                        speler2.vx -= imp * nx * 0.9;
+                        speler2.vy -= imp * ny * 0.9;
+                    }
+                }
+                
+                // Extra correctie
+                let dx2 = speler2.x - speler1.x;
+                let dy2 = speler2.y - speler1.y;
+                let minAfstand = (a.w/2 + b.w/2);
+                let afstand = Math.hypot(dx2, dy2);
+                if (afstand < minAfstand && afstand > 0.01) {
+                    let angle = Math.atan2(dy2, dx2);
+                    let verschil = minAfstand - afstand;
+                    let moveX = Math.cos(angle) * verschil * 0.5;
+                    let moveY = Math.sin(angle) * verschil * 0.5;
+                    speler1.x -= moveX;
+                    speler1.y -= moveY;
+                    speler2.x += moveX;
+                    speler2.y += moveY;
+                }
+            }
+        }
+        
+        function updateScoreUI(s1, s2, isP1) {
+            score1Span.innerText = s1;
+            score2Span.innerText = s2;
+            if (isP1) {
+                score1Span.style.transform = "scale(1.25)";
+                setTimeout(() => score1Span.style.transform = "", 150);
+            } else {
+                score2Span.style.transform = "scale(1.25)";
+                setTimeout(() => score2Span.style.transform = "", 150);
+            }
+        }
+        
+        let popups = [];
+        function toonScorePopup(x, y, kleur) {
+            popups.push({ x: x, y: y, kleur: kleur, leven: 1.0 });
+        }
+        
+        function tekenPopups() {
+            for (let i=0; i<popups.length; i++) {
+                let p = popups[i];
+                ctx.font = "bold 34px 'Courier New', monospace";
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = "black";
+                ctx.fillStyle = p.kleur;
+                ctx.globalAlpha = p.leven * 0.9;
+                ctx.fillText("+1", p.x - 18, p.y - 30);
+                p.leven -= 0.035;
+                if (p.leven <= 0) {
+                    popups.splice(i,1);
+                    i--;
+                }
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+        }
+        
+        function flitsCanvas(kleur) {
+            canvas.style.transition = "background 0.06s";
+            canvas.style.backgroundColor = kleur;
+            setTimeout(() => {
+                canvas.style.backgroundColor = "#2a5f5f";
+                setTimeout(() => canvas.style.transition = "", 80);
+            }, 85);
+        }
+        
+        // EGALE ACHTERGROND - strak, geen ruitjes
+        function tekenArena() {
+            // Eén egale, rustige kleur voor de hele arena
+            ctx.fillStyle = "#2c5a5a";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Subtiele rand
+            ctx.strokeStyle = "#ffffff20";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+            
+            // Middencirkel (decoratie)
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, canvas.height/2, 65, 0, Math.PI*2);
+            ctx.strokeStyle = "#ffcc8844";
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([8, 12]);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, canvas.height/2, 35, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Rand om de arena
+            ctx.strokeStyle = "#e6c8a0";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+            
+            // Simpele titel
+            ctx.font = "bold 16px monospace";
+            ctx.fillStyle = "#ffe0aa88";
+            ctx.fillText("⚡ BOTS ARENA ⚡", canvas.width-150, 35);
+        }
+        
+        function resetScores() {
+            score1 = 0;
+            score2 = 0;
+            score1Span.innerText = "0";
+            score2Span.innerText = "0";
+            flitsCanvas("#77ff77aa");
+            popups.push({ x: canvas.width/2, y: 70, kleur: "#aaffaa", leven: 0.9 });
+        }
+        
+        function resetPosities() {
+            speler1.x = 180;
+            speler1.y = canvas.height/2;
+            speler1.vx = 0;
+            speler1.vy = 0;
+            speler1.hoek = 0;
+            
+            speler2.x = canvas.width - 150;
+            speler2.y = canvas.height/2;
+            speler2.vx = 0;
+            speler2.vy = 0;
+            speler2.hoek = 0;
+        }
+        
+        // EVENT LISTENERS
+        window.addEventListener("keydown", (e) => {
+            const key = e.key;
+            keysPressed.set(key, true);
+            
+            if (key === "r" || key === "R") {
+                e.preventDefault();
+                resetScores();
+            }
+            if (key === "t" || key === "T") {
+                e.preventDefault();
+                resetPosities();
+            }
+            const preventKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "W", "s", "S", "a", "A", "d", "D", " ", "Space"];
+            if (preventKeys.includes(key)) {
+                e.preventDefault();
+            }
+        });
+        
+        window.addEventListener("keyup", (e) => {
+            keysPressed.set(e.key, false);
+        });
+        
+        document.getElementById("resetScoresBtn").addEventListener("click", () => {
+            resetScores();
+        });
+        
+        document.getElementById("resetPositionsBtn").addEventListener("click", () => {
+            resetPosities();
+            flitsCanvas("#aaaaff88");
+        });
+        
+        canvas.addEventListener("touchstart", (e) => e.preventDefault());
+        
+        // GAME LOOP
+        function gameLoop() {
+            verwerkBesturing();
+            speler1.update();
+            speler2.update();
+            behandelBotsingEnScore();
+            
+            tekenArena();
+            speler1.teken();
+            speler2.teken();
+            tekenPopups();
+            
+            // Snelheidsmeters
+            ctx.font = "bold 14px monospace";
+            ctx.fillStyle = "#ffb785";
+            ctx.shadowBlur = 0;
+            ctx.fillText(`⚡${Math.hypot(speler1.vx, speler1.vy).toFixed(1)}`, speler1.x-24, speler1.y-20);
+            ctx.fillStyle = "#8bcbff";
+            ctx.fillText(`⚡${Math.hypot(speler2.vx, speler2.vy).toFixed(1)}`, speler2.x-24, speler2.y-20);
+            
+            ctx.font = "11px monospace";
+            ctx.fillStyle = "#bba88a";
+            ctx.fillText("R=reset scores | T=reset posities | Simpele rode & blauwe auto's", 20, canvas.height-12);
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        resetPosities();
+        gameLoop();
+    })();
+</script>
+</body>
+</html>
